@@ -45,8 +45,8 @@ GoogleスプレッドシートをDBとして使用するミニマムなWebアプ
 
 #### 1-4. サービスアカウントキーの取得
 1. 作成したサービスアカウントをクリック
-2. 「キー」タブを開く
-3. 「鍵を追加」→「新しい鍵を作成」
+2. 「鍵」タブを開く
+3. 「キーを追加」→「新しい鍵を作成」
 4. キーのタイプは「JSON」を選択
 5. 「作成」をクリックしてJSONファイルをダウンロード
 
@@ -91,6 +91,35 @@ GOOGLE_SPREADSHEET_ID=your_spreadsheet_id_here
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL`: ダウンロードしたJSONファイルの`client_email`
 - `GOOGLE_PRIVATE_KEY`: ダウンロードしたJSONファイルの`private_key`（改行コードは`\n`のまま）
 - `GOOGLE_SPREADSHEET_ID`: スプレッドシートのURL中のID
+
+#### 3-1-1. GCP設定がどのように機能しているか
+- **サービスアカウント認証**: `google.auth.GoogleAuth` に `client_email`/`private_key` を渡すと、OAuth 2.0 のサービスアカウントフローでアクセストークンが自動取得・更新されます。これにより人のログイン無しでアプリがAPIにアクセスできます。
+- **シート共有の仕組み**: サービスアカウントをシートの共有に追加すると、そのアカウントが「編集者」として扱われ、Sheets API からのリクエストも同権限で実行されます。鍵を持つアプリだけがセルを変更できます。
+- **Sheets API v4 呼び出し**: `google.sheets({version:'v4', auth})` が `spreadsheets.values.get/update/append` などのREST APIをラップしており、内部では `https://sheets.googleapis.com/v4/...` にJSONでリクエストを送信します。本プロジェクトではA2:Cを取得し、既存行は `values.update`、新規は `values.append` で書き込みます。
+- **Next.jsとの連携**: サーバーコンポーネントから `getSheetData` を呼ぶと、サーバー上でSheets APIを実行して結果をSSRで埋め込みます。クライアント側では `SpreadsheetClient` がその初期データを受け取りつつ、ユーザー操作時のみ `/api/sheets` を通じて再度Sheets APIを呼びます。これにより秘密鍵はサーバー側に留まり、ブラウザには露出しません。
+
+```
+[Browser]
+  |  ^                      (SSRで初期データを受け取る)
+  |  |
+  |  | /api/sheets への fetch
+  v  |
+[Next.js API Route (src/app/api/...)]
+  |
+  v
+[src/lib/sheets.ts (Google Sheets client)]
+  |
+  v
+[Google Sheets API] -> [Spreadsheet]
+
+※ App Router のサーバーコンポーネント (`src/app/page.tsx`) も `src/lib/sheets.ts` を直接呼び出してSSRしますが、ブラウザからの操作はAPI Routeを経由します。
+```
+
+#### 3-1-2. 仕組みを更に理解するためのヒント
+- `console.log(await auth.getClient().getAccessToken())` のようにトークンを一度取得してみると、OAuthトークンの存在が確認できます。
+- `mitmproxy` などのプロキシでローカルHTTPトラフィックを観察すると、`https://sheets.googleapis.com/v4/spreadsheets/...` へのリクエスト/レスポンスが見えます。
+- `curl` + `Authorization: Bearer <token>` で直接 Sheets API を叩くと、サービスアカウントで発行したトークンがREST APIを呼べることが体感できます。
+- 同機能を Google Apps Script で作った場合と比べると、サービスアカウント＋Next.js ではCI/CDで鍵を管理してNode.jsから直接シートを制御できる利点が明確になります。
 
 #### 3-2. 依存パッケージのインストール
 ```bash
