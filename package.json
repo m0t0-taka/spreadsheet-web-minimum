@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "eslint"
   },
   "dependencies": {
     "googleapis": "^166.0.0",
@@ -16,6 +17,8 @@
   "devDependencies": {
     "@types/node": "^20.19.25",
     "@types/react": "^19.2.4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.3"
   }
 }
