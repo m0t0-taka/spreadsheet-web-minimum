@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import type { FruitRow } from '@/types/sheets';
 
 // Google Sheets APIのクライアントを初期化
 const getGoogleSheetsClient = () => {
@@ -16,12 +17,6 @@ const getGoogleSheetsClient = () => {
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
 const SHEET_NAME = 'Sheet1'; // スプレッドシートのシート名
 
-export interface FruitRow {
-  id: string;
-  fruit: string;
-  updatedAt: string;
-}
-
 // スプレッドシートからデータを取得
 export const getSheetData = async (): Promise<FruitRow[]> => {
   const sheets = getGoogleSheetsClient();
@@ -32,25 +27,33 @@ export const getSheetData = async (): Promise<FruitRow[]> => {
   });
 
   const rows = response.data.values || [];
-  return rows.map((row) => ({
+  return rows.map((row, index) => ({
     id: row[0] || '',
     fruit: row[1] || '',
     updatedAt: row[2] || '',
+    // indexは0スタートなのでヘッダー行を考慮して+2する
+    rowNumber: row[0] ? index + 2 : undefined,
   }));
 };
 
-// スプレッドシートのデータを更新
-export const updateSheetData = async (id: string, fruit: string): Promise<void> => {
-  const sheets = getGoogleSheetsClient();
-  const data = await getSheetData();
+interface UpdateSheetDataInput {
+  id: string;
+  fruit: string;
+  rowNumber?: number;
+}
 
-  // IDが既存かチェック
-  const existingRowIndex = data.findIndex((row) => row.id === id);
+// スプレッドシートのデータを更新
+export const updateSheetData = async ({
+  id,
+  fruit,
+  rowNumber,
+}: UpdateSheetDataInput): Promise<void> => {
+  const sheets = getGoogleSheetsClient();
+
   const updatedAt = new Date().toISOString();
 
-  if (existingRowIndex !== -1) {
-    // 既存の行を更新（ヘッダー行を考慮してindex+2）
-    const rowNumber = existingRowIndex + 2;
+  if (rowNumber) {
+    // 既存行はクライアントが持つ行番号を使い、二重リクエストを発生させない
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAME}!B${rowNumber}:C${rowNumber}`,
@@ -59,15 +62,16 @@ export const updateSheetData = async (id: string, fruit: string): Promise<void> 
         values: [[fruit, updatedAt]],
       },
     });
-  } else {
-    // 新しい行を追加
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAME}!A:C`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [[id, fruit, updatedAt]],
-      },
-    });
+    return;
   }
+
+  // 新しい行を追加
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${SHEET_NAME}!A:C`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[id, fruit, updatedAt]],
+    },
+  });
 };

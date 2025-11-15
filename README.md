@@ -6,7 +6,8 @@ GoogleスプレッドシートをDBとして使用するミニマムなWebアプ
 
 - selectboxで値を選択すると、submitなしでGoogleスプレッドシートが自動更新される
 - 既存データの更新と新規データの追加に対応
-- リアルタイムでデータ表示
+- サーバーコンポーネントで初期データをSSRし、描画直後から一覧が表示される
+- 更新時は既存行の行番号を再利用し、Google Sheets APIへのリクエストを常に1回に抑制
 
 ## 技術スタック
 
@@ -14,6 +15,12 @@ GoogleスプレッドシートをDBとして使用するミニマムなWebアプ
 - TypeScript
 - Google Sheets API v4
 - サービスアカウント認証
+
+## アーキテクチャ概要
+
+- `src/app/page.tsx` はサーバーコンポーネントとして `getSheetData` を呼び出し、初回レンダリングで一覧をSSRします。これによりクライアントの`useEffect`による二度描画を防ぎます。
+- `src/app/_components/SpreadsheetClient.tsx` はクライアント専用コンポーネントで、SSR結果を初期状態に流し込みます。ユーザー操作時だけクライアント状態を更新します。`_components` のように先頭に `_` を付けているのは、 App Router のルーティング対象から除外されるようにするためです。cf.https://nextjs.org/docs/app/getting-started/project-structure#private-folders
+- `src/lib/sheets.ts` では行番号 (`rowNumber`) を付加し、更新時にその番号をAPIへ渡すことで Sheets API を1リクエストで完結させ、読取→書込の競合を回避しています。
 
 ## セットアップ手順
 
@@ -130,10 +137,15 @@ npm run dev
 │   │   ├── api/
 │   │   │   └── sheets/
 │   │   │       └── route.ts      # API Route（GET/POST）
+│   │   ├── _components/
+│   │   │   └── SpreadsheetClient.tsx  # クライアント専用コンポーネント
 │   │   ├── layout.tsx             # レイアウト
-│   │   └── page.tsx               # メインページ
+│   │   └── page.tsx               # サーバーコンポーネント（初期データ取得）
 │   └── lib/
 │       └── sheets.ts              # Google Sheets APIヘルパー
+├── src/
+│   └── types/
+│       └── sheets.ts              # スプレッドシート行の型定義（行番号を保持）
 ├── .env.local                     # 環境変数（gitignore対象）
 ├── .env.local.example             # 環境変数のサンプル
 ├── package.json

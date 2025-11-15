@@ -18,7 +18,7 @@ export async function GET() {
 // POST: スプレッドシートのデータを更新
 export async function POST(request: NextRequest) {
   try {
-    const { id, fruit } = await request.json();
+    const { id, fruit, rowNumber } = await request.json();
 
     if (!id || !fruit) {
       return NextResponse.json(
@@ -27,7 +27,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await updateSheetData(id, fruit);
+    await updateSheetData({
+      id,
+      fruit,
+      rowNumber: typeof rowNumber === 'number' ? rowNumber : undefined,
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating sheet data:', error);
